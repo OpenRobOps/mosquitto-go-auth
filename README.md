@@ -1,6 +1,8 @@
-# Archived
+# Archived (And republished)
 
-08/06/2025: I haven't used this plugin in almost 6 years nor have followed Mosquitto's changes in some time now.
+by OpenRobOps: 04/28/2026: Republished this package in our repository to support newer mongodb driver adding a `auth_opt_mongo_uri` option and updated libwebsockets library.
+
+by iegomez: 08/06/2025: I haven't used this plugin in almost 6 years nor have followed Mosquitto's changes in some time now.
 The plugin works perfectly fine at the moment but that might stop being true in time, so I'm archiving the project to make clear there will be no more changes to it.
 Thanks to everyone that had kinds words and appreciated the project.
 
@@ -1309,22 +1311,30 @@ Example acls:
 Options for `mongo` are the following:
 
 
-| Option                               | default      | Mandatory | Meaning                              |
-| ------------------------------------ | ------------ | :-------: | ------------------------------------ |
-| auth_opt_mongo_host                  | localhost    |     N     | IP address,will skip dns lookup      |
-| auth_opt_mongo_port                  | 27017        |     N     | TCP port number                      |
-| auth_opt_mongo_dbname                | mosquitto    |     N     | MongoDB DB name                      |
-| auth_opt_mongo_authsource            | ""           |     N     | MongoDB authsource DB name           |
-| auth_opt_mongo_username              | ""           |     N     | MongoDB username                     |
-| auth_opt_mongo_password              | ""           |     N     | MongoDB password                     |
-| auth_opt_mongo_users                 | users        |     N     | User collection                      |
-| auth_opt_mongo_acls                  | acls         |     N     | ACL collection                       |
-| auth_opt_mongo_disable_superuser     | true         |     N     | Disable query to check for superuser |
-| auth_opt_mongo_with_tls              | false        |     N     | Connect with TLS                     |
-| auth_opt_mongo_insecure_skip_verify  | false        |     N     | Verify server's certificate chain    |
+| Option                               | default      | Mandatory | Meaning                                                                                                       |
+| ------------------------------------ | ------------ | :-------: | ------------------------------------------------------------------------------------------------------------- |
+| auth_opt_mongo_uri                   | ""           |     N     | Full MongoDB connection string. Required for MongoDB Atlas (`mongodb+srv://...`). When set, takes precedence over `mongo_host`, `mongo_port`, `mongo_username`, `mongo_password`, `mongo_authsource`. |
+| auth_opt_mongo_host                  | localhost    |     N     | IP address, will skip dns lookup. Ignored when `mongo_uri` is set.                                            |
+| auth_opt_mongo_port                  | 27017        |     N     | TCP port number. Ignored when `mongo_uri` is set.                                                             |
+| auth_opt_mongo_dbname                | mosquitto    |     N     | MongoDB DB name to query for users/ACLs. Always required (the database segment of `mongo_uri` is not used).   |
+| auth_opt_mongo_authsource            | ""           |     N     | MongoDB authsource DB name. Ignored when `mongo_uri` is set (use `?authSource=` in the URI).                  |
+| auth_opt_mongo_username              | ""           |     N     | MongoDB username. Ignored when `mongo_uri` is set (encode credentials in the URI).                            |
+| auth_opt_mongo_password              | ""           |     N     | MongoDB password. Ignored when `mongo_uri` is set (encode credentials in the URI).                            |
+| auth_opt_mongo_users                 | users        |     N     | User collection                                                                                               |
+| auth_opt_mongo_acls                  | acls         |     N     | ACL collection                                                                                                |
+| auth_opt_mongo_disable_superuser     | true         |     N     | Disable query to check for superuser                                                                          |
+| auth_opt_mongo_with_tls              | false        |     N     | Connect with TLS                                                                                              |
+| auth_opt_mongo_insecure_skip_verify  | false        |     N     | Skip server certificate verification (when `mongo_with_tls` is true)                                          |
 
 
-If you experience any problem connecting to a replica set, please refer to [this issue](https://github.com/iegomez/mosquitto-go-auth/issues/32).
+Example for MongoDB Atlas (or any cluster reachable via the SRV scheme):
+
+```
+auth_opt_mongo_uri mongodb+srv://USER:PASSWORD@cluster0.example.mongodb.net/?retryWrites=true&w=majority
+auth_opt_mongo_dbname mosquitto
+```
+
+For replica sets or any other non-trivial topology, set `auth_opt_mongo_uri` directly with the full connection string returned by your MongoDB provider — that is the recommended way and supersedes the older host/port-based configuration. (Historical context for the per-host options: see [this issue](https://github.com/iegomez/mosquitto-go-auth/issues/32).)
 
 #### Password hashing
 

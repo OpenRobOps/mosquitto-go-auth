@@ -12,12 +12,13 @@ import (
 	"github.com/iegomez/mosquitto-go-auth/hashing"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 type Mongo struct {
+	URI                string
 	Host               string
 	Port               string
 	Username           string
@@ -51,6 +52,7 @@ func NewMongo(authOpts map[string]string, logLevel log.Level, hasher hashing.Has
 	log.SetLevel(logLevel)
 
 	var m = Mongo{
+		URI:                "",
 		Host:               "localhost",
 		Port:               "27017",
 		Username:           "",
@@ -66,6 +68,10 @@ func NewMongo(authOpts map[string]string, logLevel log.Level, hasher hashing.Has
 
 	if authOpts["mongo_disable_superuser"] == "true" {
 		m.disableSuperuser = true
+	}
+
+	if mongoURI, ok := authOpts["mongo_uri"]; ok {
+		m.URI = mongoURI
 	}
 
 	if mongoHost, ok := authOpts["mongo_host"]; ok {
@@ -108,35 +114,52 @@ func NewMongo(authOpts map[string]string, logLevel log.Level, hasher hashing.Has
 		m.insecureSkipVerify = true
 	}
 
-	addr := fmt.Sprintf("mongodb://%s:%s", m.Host, m.Port)
+	clientOpts := options.Client().SetConnectTimeout(60 * time.Second)
 
-	to := 60 * time.Second
+	if m.URI != "" {
+		clientOpts.ApplyURI(m.URI)
 
-	opts := options.ClientOptions{
-		ConnectTimeout: &to,
+		if _, ok := authOpts["mongo_host"]; ok {
+			log.Infof("mongo backend: mongo_uri is set; ignoring mongo_host")
+		}
+		if _, ok := authOpts["mongo_port"]; ok {
+			log.Infof("mongo backend: mongo_uri is set; ignoring mongo_port")
+		}
+		if _, ok := authOpts["mongo_username"]; ok {
+			log.Infof("mongo backend: mongo_uri is set; ignoring mongo_username (encode credentials in the URI)")
+		}
+		if _, ok := authOpts["mongo_password"]; ok {
+			log.Infof("mongo backend: mongo_uri is set; ignoring mongo_password (encode credentials in the URI)")
+		}
+		if _, ok := authOpts["mongo_authsource"]; ok {
+			log.Infof("mongo backend: mongo_uri is set; ignoring mongo_authsource (use ?authSource= in the URI)")
+		}
+	} else {
+		addr := fmt.Sprintf("mongodb://%s:%s", m.Host, m.Port)
+		clientOpts.ApplyURI(addr)
+
+		if m.Username != "" && m.Password != "" {
+			cred := options.Credential{
+				AuthSource:  m.DBName,
+				Username:    m.Username,
+				Password:    m.Password,
+				PasswordSet: true,
+			}
+			if m.AuthSource != "" {
+				cred.AuthSource = m.AuthSource
+				log.Infof("mongo backend: set authentication db to: %s", m.AuthSource)
+			}
+			clientOpts.SetAuth(cred)
+		}
 	}
 
 	if m.withTLS {
-		opts.TLSConfig = &tls.Config{}
+		clientOpts.SetTLSConfig(&tls.Config{
+			InsecureSkipVerify: m.insecureSkipVerify,
+		})
 	}
 
-	opts.ApplyURI(addr)
-
-	if m.Username != "" && m.Password != "" {
-		opts.Auth = &options.Credential{
-			AuthSource:  m.DBName,
-			Username:    m.Username,
-			Password:    m.Password,
-			PasswordSet: true,
-		}
-		// Set custom AuthSource db if supplied in config
-		if m.AuthSource != "" {
-			opts.Auth.AuthSource = m.AuthSource
-			log.Infof("mongo backend: set authentication db to: %s", m.AuthSource)
-		}
-	}
-
-	client, err := mongo.Connect(context.TODO(), &opts)
+	client, err := mongo.Connect(clientOpts)
 	if err != nil {
 		return m, errors.Errorf("couldn't start mongo backend: %s", err)
 	}

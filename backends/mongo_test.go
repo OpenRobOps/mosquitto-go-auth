@@ -302,3 +302,50 @@ func TestMongoUtf8(t *testing.T) {
 		mongo.Halt()
 	})
 }
+
+// TestMongoURI exercises the new mongo_uri configuration option, ensuring that
+// when a full connection string is supplied the backend connects and operates
+// correctly without relying on the legacy mongo_host / mongo_port options.
+func TestMongoURI(t *testing.T) {
+
+	const mongoURI = "mongodb://localhost:27017"
+	const mongoDbName = "mosquitto_test"
+
+	const username = "test"
+	const userPass = "testpw"
+	const userPassHash = "PBKDF2$sha512$100000$os24lcPr9cJt2QDVWssblQ==$BK1BQ2wbwU1zNxv3Ml3wLuu5//hPop3/LvaPYjjCwdBvnpwusnukJPpcXQzyyjOlZdieXTx6sXAcX4WnZRZZnw=="
+
+	authOpts := map[string]string{
+		"mongo_uri":    mongoURI,
+		"mongo_dbname": mongoDbName,
+	}
+
+	Convey("Given mongo_uri NewMongo should connect and operate", t, func() {
+
+		mongo, err := NewMongo(authOpts, log.DebugLevel, hashing.NewHasher(authOpts, "mongo"))
+		So(err, ShouldBeNil)
+		So(mongo.URI, ShouldEqual, mongoURI)
+
+		mongoDb := mongo.Conn.Database(mongo.DBName)
+		mongoDb.Drop(context.TODO())
+		usersColl := mongoDb.Collection(mongo.UsersCollection)
+
+		testUser := MongoUser{
+			Username:     username,
+			PasswordHash: userPassHash,
+			Superuser:    false,
+		}
+		insertResult, err := usersColl.InsertOne(context.TODO(), &testUser)
+		So(err, ShouldBeNil)
+		So(insertResult.InsertedID, ShouldNotBeNil)
+
+		Convey("GetUser should authenticate the seeded user", func() {
+			authenticated, err := mongo.GetUser(username, userPass, "")
+			So(err, ShouldBeNil)
+			So(authenticated, ShouldBeTrue)
+		})
+
+		mongoDb.Drop(context.TODO())
+		mongo.Halt()
+	})
+}
