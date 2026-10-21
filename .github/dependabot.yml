@@ -1,0 +1,15 @@
+# Dependabot version updates for the fork: actions and base images only. Go modules are
+# left alone because this fork pins a patched MongoDB driver.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
